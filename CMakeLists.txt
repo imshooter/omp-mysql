@@ -4,6 +4,7 @@ project(mysql VERSION 0.3.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(ExternalProject)
 include(FetchContent)
@@ -26,27 +27,49 @@ FetchContent_Declare(mariadbcc
 FetchContent_MakeAvailable(omp-sdk pawn mariadbcc)
 
 set(MARIADB_BUILD "${CMAKE_BINARY_DIR}/mariadb")
-set(MARIADB_LIBRARY "${MARIADB_BUILD}/libmariadb/Release/mariadbclient.lib")
-file(TO_NATIVE_PATH "${mariadbcc_SOURCE_DIR}/" MARIADB_SOURCE_PREFIX)
+set(MARIADB_ARGS
+	-DWITH_UNIT_TESTS=OFF
+	-DWITH_CURL=OFF
+	-DWITH_EXTERNAL_ZLIB=OFF
+	-DCLIENT_PLUGIN_DIALOG=STATIC
+	-DCLIENT_PLUGIN_CLIENT_ED25519=STATIC
+	-DCLIENT_PLUGIN_CACHING_SHA2_PASSWORD=STATIC
+	-DCLIENT_PLUGIN_SHA256_PASSWORD=STATIC
+	-DCLIENT_PLUGIN_MYSQL_CLEAR_PASSWORD=STATIC
+	-DCLIENT_PLUGIN_AUTH_GSSAPI_CLIENT=OFF
+	-DCLIENT_PLUGIN_MYSQL_OLD_PASSWORD=OFF
+	-DCLIENT_PLUGIN_REMOTE_IO=OFF
+)
+
+if(WIN32)
+	set(MARIADB_LIBRARY "${MARIADB_BUILD}/libmariadb/Release/mariadbclient.lib")
+	file(TO_NATIVE_PATH "${mariadbcc_SOURCE_DIR}/" MARIADB_SOURCE_PREFIX)
+	list(APPEND MARIADB_ARGS
+		"-DCMAKE_C_FLAGS=/DWIN32 /D_WINDOWS /d1trimfile:${MARIADB_SOURCE_PREFIX}"
+		-DWITH_SSL=SCHANNEL
+		-DCLIENT_PLUGIN_PVIO_NPIPE=STATIC
+		-DCLIENT_PLUGIN_PVIO_SHMEM=STATIC
+	)
+else()
+	set(OPENSSL_USE_STATIC_LIBS TRUE)
+	find_package(OpenSSL 3 REQUIRED)
+	find_package(Threads REQUIRED)
+	set(MARIADB_LIBRARY "${MARIADB_BUILD}/libmariadb/libmariadbclient.a")
+	list(APPEND MARIADB_ARGS
+		"-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+		"-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} -ffile-prefix-map=${mariadbcc_SOURCE_DIR}/="
+		-DCMAKE_BUILD_TYPE=Release
+		-DCMAKE_POSITION_INDEPENDENT_CODE=ON
+		-DWITH_SSL=OPENSSL
+		"-DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
+		-DOPENSSL_USE_STATIC_LIBS=TRUE
+	)
+endif()
+
 ExternalProject_Add(mariadb
 	SOURCE_DIR "${mariadbcc_SOURCE_DIR}"
 	BINARY_DIR "${MARIADB_BUILD}"
-	CMAKE_ARGS
-		"-DCMAKE_C_FLAGS=/DWIN32 /D_WINDOWS /d1trimfile:${MARIADB_SOURCE_PREFIX}"
-		-DWITH_UNIT_TESTS=OFF
-		-DWITH_CURL=OFF
-		-DWITH_SSL=SCHANNEL
-		-DWITH_EXTERNAL_ZLIB=OFF
-		-DCLIENT_PLUGIN_DIALOG=STATIC
-		-DCLIENT_PLUGIN_CLIENT_ED25519=STATIC
-		-DCLIENT_PLUGIN_CACHING_SHA2_PASSWORD=STATIC
-		-DCLIENT_PLUGIN_SHA256_PASSWORD=STATIC
-		-DCLIENT_PLUGIN_MYSQL_CLEAR_PASSWORD=STATIC
-		-DCLIENT_PLUGIN_PVIO_NPIPE=STATIC
-		-DCLIENT_PLUGIN_PVIO_SHMEM=STATIC
-		-DCLIENT_PLUGIN_AUTH_GSSAPI_CLIENT=OFF
-		-DCLIENT_PLUGIN_MYSQL_OLD_PASSWORD=OFF
-		-DCLIENT_PLUGIN_REMOTE_IO=OFF
+	CMAKE_ARGS ${MARIADB_ARGS}
 	BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release --target mariadbclient
 	INSTALL_COMMAND ""
 	BUILD_BYPRODUCTS "${MARIADB_LIBRARY}"
@@ -65,6 +88,10 @@ target_include_directories(passwords
 	PUBLIC external/argon2/include external/crypt_blowfish
 	PRIVATE external/argon2/src
 )
+target_compile_definitions(passwords PRIVATE BF_NO_ASM)
+if(NOT MSVC AND CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
+	target_compile_options(passwords PRIVATE -msse2)
+endif()
 
 add_library(mysql SHARED
 	src/connection.cpp
@@ -94,8 +121,12 @@ target_compile_definitions(mysql PRIVATE
 )
 if(WIN32)
 	target_compile_definitions(mysql PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+	target_link_libraries(mysql PRIVATE OMP-SDK passwords "${MARIADB_LIBRARY}" ws2_32 advapi32 shlwapi crypt32 bcrypt secur32)
+else()
+	target_compile_options(mysql PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
+	target_link_options(mysql PRIVATE -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL)
+	target_link_libraries(mysql PRIVATE OMP-SDK passwords "${MARIADB_LIBRARY}" OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
 endif()
 if(MSVC)
 	target_compile_options(mysql PRIVATE /W3 /utf-8)
 endif()
-target_link_libraries(mysql PRIVATE OMP-SDK passwords "${MARIADB_LIBRARY}" ws2_32 advapi32 shlwapi crypt32 bcrypt secur32)
