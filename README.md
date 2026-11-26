@@ -19,11 +19,11 @@ An open.mp component for MySQL and MariaDB. Queries run on threads of their own 
 
 ## Installation
 
-1. Download the latest release from [Releases](https://github.com/imshooter/MySQL/releases).
-2. Place `mysql.dll` in the `components` folder of the server.
+1. Download the latest release from [Releases](https://github.com/imshooter/MySQL/releases), the `windows-x86` or the `linux-x86` zip.
+2. Place `mysql.dll` or `mysql.so` in the `components` folder of the server.
 3. Place `mysql.inc` in the include folder of the compiler.
 
-No plugin is needed. Tested with open.mp 1.6.7 and MariaDB 10.4 on Windows. Only a Windows build is available for now.
+No plugin is needed. Tested with open.mp 1.6.7, with MariaDB 10.4 on Windows and MariaDB 10.11 on Ubuntu 20.04, Debian 12 and Ubuntu 24.04. The Linux build needs glibc 2.28 or later, and OpenSSL 3.0 is linked into it, so it needs no other library.
 
 ## A first script
 
@@ -142,14 +142,23 @@ The tests in [`tests`](tests) run as a gamemode against a database, and shut the
 
 ## Building
 
-Windows with Visual Studio 2022 or its Build Tools, and CMake 3.19 or later. CMake fetches the open.mp SDK, the Pawn headers and MariaDB Connector/C 3.4.11.
+CMake 3.19 or later fetches the open.mp SDK, the Pawn headers and MariaDB Connector/C 3.4.11. The server is 32 bit, so the component must be too.
+
+On Windows, with Visual Studio 2022 or its Build Tools:
 
 ```
 cmake -S . -B build -A Win32
 cmake --build build --config Release --target mysql
 ```
 
-The component is written to `build/Release/mysql.dll`. The server is 32 bit, so the component must be too.
+On Linux, with GCC and its 32 bit libraries, and a static 32 bit OpenSSL 3:
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32 -DOPENSSL_ROOT_DIR=/opt/openssl
+cmake --build build --target mysql
+```
+
+The component is written to `build/Release/mysql.dll` or `build/mysql.so`. The Linux release is built on Ubuntu 20.04 with OpenSSL 3.0, as [`.github/workflows/main.yml`](.github/workflows/main.yml) does, and GitHub Actions runs the tests on Linux at every push.
 
 ## Thanks to
 
@@ -157,8 +166,9 @@ The component is written to `build/Release/mysql.dll`. The server is 32 bit, so 
 - [@ibireme](https://github.com/ibireme) for [yyjson](https://github.com/ibireme/yyjson), which reads the JSON cells.
 - [@P-H-C](https://github.com/P-H-C) for the reference implementation of [Argon2](https://github.com/P-H-C/phc-winner-argon2).
 - [@solardiz](https://github.com/solardiz) for [crypt_blowfish](https://www.openwall.com/crypt/).
+- [@openssl](https://github.com/openssl) for [OpenSSL](https://github.com/openssl/openssl), linked into the Linux build under the Apache License 2.0.
 - [@openmultiplayer](https://github.com/openmultiplayer) for the [SDK](https://github.com/openmultiplayer/open.mp-sdk) and the [Pawn compiler](https://github.com/openmultiplayer/compiler).
 
 ## License
 
-Released under the [MIT License](LICENSE). The libraries in [`external`](external) keep their own licenses, and MariaDB Connector/C is under the LGPL 2.1.
+Released under the [MIT License](LICENSE). The libraries in [`external`](external) keep their own licenses, MariaDB Connector/C is under the LGPL 2.1, and OpenSSL, in the Linux build, under the Apache License 2.0.
