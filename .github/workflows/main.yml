@@ -1,0 +1,184 @@
+name: Build mysql-omp for Linux x86
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OPENSSL_VERSION: 3.0.15
+
+jobs:
+  build-linux:
+    name: Linux x86 32-bit
+    runs-on: ubuntu-24.04
+    container: ubuntu:20.04
+
+    steps:
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y software-properties-common curl git ninja-build make perl file binutils
+          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          apt-get update
+          apt-get install -y gcc-14 g++-14 g++-14-multilib
+          curl -sSL https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5-linux-x86_64.tar.gz | tar -xz -C /opt
+          echo /opt/cmake-3.30.5-linux-x86_64/bin >> "$GITHUB_PATH"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore OpenSSL
+        id: openssl
+        uses: actions/cache@v4
+        with:
+          path: /opt/openssl
+          key: openssl-${{ env.OPENSSL_VERSION }}-linux-x86-gcc14
+
+      - name: Build OpenSSL
+        if: steps.openssl.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL "https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz" | tar -xz
+          cd "openssl-$OPENSSL_VERSION"
+          CC=gcc-14 ./Configure linux-x86 -m32 -fPIC no-shared no-tests --prefix=/opt/openssl --libdir=lib
+          make -j2
+          make install_sw
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DCMAKE_C_FLAGS=-m32 \
+            -DCMAKE_CXX_FLAGS=-m32 \
+            -DCMAKE_SHARED_LINKER_FLAGS=-m32 \
+            -DOPENSSL_ROOT_DIR=/opt/openssl
+
+      - name: Build mysql
+        run: cmake --build build --target mysql --parallel 2
+
+      - name: Check the library
+        run: |
+          file build/mysql.so
+          echo "Newest glibc it needs: $(objdump -T build/mysql.so | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
+          echo "Libraries it needs: $(objdump -p build/mysql.so | awk '/NEEDED/ { print $2 }' | tr '\n' ' ')"
+          if objdump -T build/mysql.so | grep -q 'GLIBCXX\|CXXABI\|OPENSSL_[0-9]'; then
+            echo "ERROR: mysql.so needs the libstdc++ or the OpenSSL of the system."
+            exit 1
+          fi
+
+      - name: Prepare the Linux build
+        run: |
+          mkdir -p dist/components dist/qawno/include
+          cp build/mysql.so dist/components/
+          cp include/mysql.inc dist/qawno/include/
+          cp LICENSE dist/LICENSE.txt
+          cp build/_deps/mariadbcc-src/COPYING.LIB dist/LICENSE-MariaDB-Connector-C.txt
+          cp "openssl-$OPENSSL_VERSION/LICENSE.txt" dist/LICENSE-OpenSSL.txt 2>/dev/null || curl -sSL "https://raw.githubusercontent.com/openssl/openssl/openssl-$OPENSSL_VERSION/LICENSE.txt" -o dist/LICENSE-OpenSSL.txt
+          cp external/argon2/LICENSE dist/LICENSE-argon2.txt
+          cp external/crypt_blowfish/LICENSE dist/LICENSE-crypt_blowfish.txt
+          cp external/yyjson/LICENSE dist/LICENSE-yyjson.txt
+
+      - name: Upload the Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: MySQL-linux-x86
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  test-linux:
+    name: Test on ${{ matrix.system }}
+    needs: build-linux
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.system }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        system:
+          - ubuntu:20.04
+          - debian:12
+          - ubuntu:24.04
+
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "1"
+          MARIADB_DATABASE: mysql_test
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Install the libraries of the server
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          dpkg --add-architecture i386
+          apt-get update
+          apt-get install -y curl ca-certificates libc6:i386 libatomic1:i386 libstdc++6:i386
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download the Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: MySQL-linux-x86
+          path: dist
+
+      - name: Download open.mp and the Pawn compiler
+        run: |
+          curl -sSL -o omp.tar.gz https://github.com/openmultiplayer/open.mp/releases/download/v1.6.7.3218/open.mp-linux-x86.tar.gz
+          mkdir omp
+          tar -xzf omp.tar.gz -C omp
+          curl -sSL -o pawnc.tar.gz https://github.com/openmultiplayer/compiler/releases/download/v3.10.11/pawnc-3.10.11-linux.tar.gz
+          mkdir pawnc
+          tar -xzf pawnc.tar.gz -C pawnc
+
+      - name: Run the tests
+        env:
+          MYSQL_TEST_DATABASE: mysql_test
+        run: |
+          server=$(dirname "$(find omp -name omp-server -type f | head -1)")
+          pawncc=$(find pawnc -name pawncc -type f | head -1)
+          includes=$(dirname "$(find omp -name open.mp.inc | head -1)")
+          export LD_LIBRARY_PATH="$(dirname "$(find pawnc -name 'libpawnc.so' | head -1)")"
+          mkdir -p "$server/gamemodes" "$server/scriptfiles"
+          cp dist/components/mysql.so "$server/components/"
+          chmod +x "$server/omp-server"
+          failed=0
+
+          for name in queries statements passwords settings; do
+            printf '#define TEST_HOST "mariadb"\n#include "tests/%s.pwn"\n' "$name" > "ci-$name.pwn"
+            "$pawncc" "ci-$name.pwn" -itests -iinclude "-i$includes" '-;+' '-(+' -d2 "-o$server/gamemodes/$name.amx"
+            cat > "$server/config.json" <<EOF
+          {
+              "announce": false,
+              "enable_query": false,
+              "max_players": 2,
+              "name": "mysql-omp test",
+              "network": { "bind": "127.0.0.1", "port": 7777 },
+              "pawn": { "legacy_plugins": [], "main_scripts": ["$name"], "side_scripts": [] },
+              "rcon": { "enable": false, "password": "mysql-omp-test" },
+              "logging": { "use_prefix": false, "use_timestamp": false }
+          }
+          EOF
+            (cd "$server" && timeout 120 ./omp-server > "output-$name.txt" 2>&1 || true)
+            echo "== $name"
+            grep -a "mysql\|\[test\] FAIL\|\[test\] DONE\|rror" "$server/output-$name.txt" | grep -v "^\s*$" | tail -20
+            grep -q "\[test\] DONE tests [0-9]* checks [0-9]* fails 0 " "$server/output-$name.txt" || failed=1
+          done
+
+          exit $failed
