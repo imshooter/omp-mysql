@@ -1,5 +1,7 @@
 # MySQL
 
+[![release](https://img.shields.io/github/v/release/imshooter/omp-mysql)](https://github.com/imshooter/omp-mysql/releases/latest) [![Build](https://img.shields.io/github/actions/workflow/status/imshooter/omp-mysql/main.yml?branch=main&label=Build&logo=github)](https://github.com/imshooter/omp-mysql/actions/workflows/main.yml)
+
 > [!NOTE]
 > MySQL is experimental and already runs in production. Its natives may still change from one version to the next. It was made with Claude Opus 5.5, a model by [Anthropic](https://www.anthropic.com).
 
