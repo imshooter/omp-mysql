@@ -1,4 +1,4 @@
-name: Build mysql-omp for Linux x86
+name: Build omp-mysql for Linux x86
 
 on:
   push:
@@ -168,10 +168,10 @@ jobs:
               "announce": false,
               "enable_query": false,
               "max_players": 2,
-              "name": "mysql-omp test",
+              "name": "omp-mysql test",
               "network": { "bind": "127.0.0.1", "port": 7777 },
               "pawn": { "legacy_plugins": [], "main_scripts": ["$name"], "side_scripts": [] },
-              "rcon": { "enable": false, "password": "mysql-omp-test" },
+              "rcon": { "enable": false, "password": "omp-mysql-test" },
               "logging": { "use_prefix": false, "use_timestamp": false }
           }
           EOF
