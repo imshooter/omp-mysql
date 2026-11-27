@@ -123,7 +123,7 @@ test ReadsTheEnvironment() {
     fclose(file);
 
     new const
-        MySQL:handle = MySQL_ConnectFile("scriptfiles/envtest.ini")
+        MySQL:handle = MySQL_ConnectFile("envtest.ini")
     ;
 
     ASSERT_NE(handle, INVALID_MYSQL_ID);

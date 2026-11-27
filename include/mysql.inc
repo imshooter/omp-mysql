@@ -132,7 +132,8 @@ native MySQL:MySQL_Connect(const host[], const user[], const password[], const d
  *
  * A variable that is not set makes the file not valid.
  *
- * @param      file  Path of the file, from the folder of the server.
+ * @param      file  Path of the file. A relative path is looked for in `scriptfiles` first, then
+ *                   from the folder of the server.
  *
  * @return     - the handle
  *             - `INVALID_MYSQL_ID` the file cannot be read or has a setting that is not valid

@@ -6,6 +6,7 @@
 #include <charconv>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 
 namespace mysqlcomponent {
 
@@ -337,6 +338,11 @@ cell AMX_NATIVE_CALL MySQL_ConnectFile(AMX* amx, const cell* params) {
 	}
 	if (path.empty()) {
 		path = "mysql.ini";
+	}
+	std::error_code ignored;
+	std::filesystem::path inScriptfiles = std::filesystem::path("scriptfiles") / path;
+	if (std::filesystem::path(path).is_relative() && std::filesystem::is_regular_file(inScriptfiles, ignored)) {
+		path = inScriptfiles.string();
 	}
 	Settings settings;
 	std::string error;

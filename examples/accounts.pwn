@@ -6,7 +6,7 @@
  * of the component, the lookups and the inserts are prepared statements, and the score of every
  * logged in player is saved in one batch every minute and when they leave.
  *
- * The settings of the connection are read from mysql.ini in the folder of the server:
+ * The settings of the connection are read from mysql.ini in scriptfiles:
  *
  *     hostname = 127.0.0.1
  *     username = root

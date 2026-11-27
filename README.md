@@ -67,7 +67,7 @@ public OnScoreRead(playerid) {
 }
 ```
 
-`mysql.ini`, in the folder of the server:
+`mysql.ini`, in `scriptfiles` or in the folder of the server:
 
 ```ini
 hostname = 127.0.0.1
