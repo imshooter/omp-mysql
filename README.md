@@ -21,7 +21,7 @@ An open.mp component for MySQL and MariaDB. Queries run on threads of their own 
 
 ## Installation
 
-1. Download the latest release from [Releases](https://github.com/imshooter/MySQL/releases), the `windows-x86` or the `linux-x86` zip.
+1. Download the latest release from [Releases](https://github.com/imshooter/omp-mysql/releases), the `windows-x86` or the `linux-x86` zip.
 2. Place `mysql.dll` or `mysql.so` in the `components` folder of the server.
 3. Place `mysql.inc` in the include folder of the compiler.
 
@@ -127,11 +127,11 @@ Saving 2000 items of a gamemode, each a row with JSON attributes:
 | MySQL, one query built in pieces | 17 ms | 63 ms |
 | MySQL, prepared statements in batches | 16 ms | 45 ms |
 
-An Argon2id hash of 19 MiB and two passes takes about 36 ms. See [Performance](https://github.com/imshooter/MySQL/wiki/Performance) in the wiki for the rest.
+An Argon2id hash of 19 MiB and two passes takes about 36 ms. See [Performance](https://github.com/imshooter/omp-mysql/wiki/Performance) in the wiki for the rest.
 
 ## Documentation
 
-The [wiki](https://github.com/imshooter/MySQL/wiki) has a page for every native, the settings and guides to queries, results, JSON cells, prepared statements, passwords and TLS.
+The [wiki](https://github.com/imshooter/omp-mysql/wiki) has a page for every native, the settings and guides to queries, results, JSON cells, prepared statements, passwords and TLS.
 
 ## Tests
 
